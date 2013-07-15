@@ -24,11 +24,11 @@ WebService::Megaplan - The API for Megaplan.ru service (Web-based business autom
 
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 
 =head1 SYNOPSIS
@@ -47,11 +47,20 @@ Currently implemented only low-level API where you have to provide URI of API ca
                     hostname => 'mycompany.megaplan.ru',
                     use_ssl  => 1,
                 );
-    $api->authorize();
+    my $employee_id = $api->authorize();
     
     # get list of tasks
     my $data = $api->get_data('/BumsTaskApiV01/Task/list.api', { OnlyActual => 'true' });
     my $task_list = $data->{data}->{tasks};
+
+    # create new task
+    my $task_reply = $api->post_data('/BumsTaskApiV01/Task/create.api', {
+                                'Model[Name]'        => 'Test title',
+                                'Model[SuperTask]'   => 'p1000001',
+                                'Model[Statement]'   => 'Task long description',
+                                'Model[Responsible]' => $employee_id, # number like 1000020
+                            });
+    printf "Created task #%d\n", $task_reply->{data}->{task}->{Id};
 
 =head1 METHODS
 
@@ -94,7 +103,7 @@ sub new {
 
 Authenticate itself on Megaplan server and obtain AccessId and SecretKey values.
 
-Returns true value on success. This method have to be called before any other API calls.
+Returns true value on success (ID of logged in Employee). This method have to be called before any other API calls.
 
 =cut
 
@@ -131,11 +140,12 @@ sub authorize {
 
     $self->secret_key($secret);
     $self->access_id($access_id);
-
-    return 1;
+    
+    # also there are 'UserId' value
+    return $data->{data}->{EmployeeId};
 }
 
-=head2 get_data(uri_path, [ $params ])
+=head2 get_data(uri_path, params)
 
 Low-level method to perform GET query to corresponding API method
 
@@ -143,9 +153,11 @@ Low-level method to perform GET query to corresponding API method
 
 =item uri_path -- URI, for example '/BumsTaskApiV01/Task/list.api'
 
-=item params   -- hash-reference of API call arguments
+=item params   -- hash-reference of API call arguments (optional)
 
 =back
+
+Returns perl data, converted from resulted JSON. died in case of errors.
 
 =cut
 
@@ -199,13 +211,65 @@ sub get_data {
     return $data;
 }
 
-=head2 post_data
+=head2 post_data(uri_path, params)
 
-TODO -- perform POST request to modify the data and create new objects
+Low-level method to perform POST request to API - to create new objects or update existing ones
+
+=over 2
+
+=item uri_path -- URI, for example '/BumsCommonApiV01/Comment/create.api'
+
+=item params   -- hash-reference of API call arguments
+
+=back
+
+Returns perl data, converted from resulted JSON. died in case of errors.
 
 =cut
 
 sub post_data {
+    my ($self, $uri_path, $params) = @_;
+
+    # it's unlikely that $params is empty
+
+    $self->authorize() if(! $self->secret_key);
+    die "No secret key, failed login?" if(! $self->secret_key);
+
+    my $content = $self->http->www_form_urlencode($params);
+
+    my ($signature, $date) = $self->_make_signature(
+                                    method       => 'POST',
+                                    content      => $content,
+                                    uri_path     => $uri_path
+                                );
+    my $url = ($self->use_ssl ? 'https' : 'http') 
+                    . '://' 
+                    . $self->hostname 
+                    . ($self->port ? ':' . $self->port : '') 
+                    . $uri_path;
+
+    my $response = $self->http->post_form($url, $params, {
+                            headers => {
+                                Date              => $date,
+                                'X-Sdf-Date'      => $date,
+                                Accept            => 'application/json',
+                                'X-Authorization' => join(':', $self->access_id, $signature),
+                                'Content-MD5'     => md5_hex($content),
+                            },
+                        });
+
+    die 'No response from server' if(! $response);
+    if(! $response->{success}) {
+        die sprintf('POST failed: %03d %s', $response->{status}, $response->{reason});
+    }
+
+    my $data = from_json($response->{content});
+
+    if($data->{status}->{code} ne 'ok') {
+        die sprintf('POST failed: %s', $data->{status}->{message});
+    }
+
+    return $data;
 }
 
 #-------------- private
@@ -215,7 +279,9 @@ sub _make_signature {
     # method, content_md5, content_type, date, url
     my @fields = ($opts{method});
     if($opts{content}) {
-        # TODO 
+        push @fields,
+                md5_hex($opts{content}),
+                'application/x-www-form-urlencoded';
     }
     else {
         push @fields, '', '';
@@ -233,6 +299,8 @@ sub _make_signature {
         $url .= '?' . $query_string;
     }
     push @fields, $url;
+
+    #printf STDERR "Signature for:\n%s\n", join("\n", @fields);
 
     my $signature = encode_base64( hmac_sha1_hex(join("\n", @fields), $self->secret_key), '');
 

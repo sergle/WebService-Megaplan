@@ -6,6 +6,7 @@ README
 t/00-load.t
 t/01-authorize.t
 t/02-get_data.t
+t/03-post_data.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t

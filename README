@@ -19,6 +19,14 @@ http://wiki.megaplan.ru/API
     my $data = $api->get_data('/BumsTaskApiV01/Task/list.api', { OnlyActual => 'true' });
     my $task_list = $data->{data}->{tasks};
 
+    # create new task
+    my $task_reply = $api->post_data('/BumsTaskApiV01/Task/create.api', {
+                                'Model[Name]'        => 'Test title',
+                                'Model[SuperTask]'   => 'p1000001',
+                                'Model[Statement]'   => 'Task long description',
+                                'Model[Responsible]' => $employee_id, # number like 1000020
+                            });
+    printf "Created task #%d\n", $task_reply->{data}->{task}->{Id};
 
 INSTALLATION
 
@@ -28,6 +36,15 @@ To install this module, run the following commands:
 	./Build
 	./Build test
 	./Build install
+
+TESTING
+
+To provide real credentials to the tests, pass them via environment variables:
+    MEGAPLAN_LOGIN
+    MEGAPLAN_PASSWORD
+    MEGAPLAN_HOST
+    MEGAPLAN_PROJECT (this is Id of project to test)
+
 
 SUPPORT AND DOCUMENTATION
 
