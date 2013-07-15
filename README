@@ -4,6 +4,8 @@ Perl bindings for Megaplan.ru API
 
 http://wiki.megaplan.ru/API
 
+VERSION 0.02
+
 
     use WebService::Megaplan;
 
