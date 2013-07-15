@@ -1,15 +1,23 @@
 WebService-Megaplan
 
-The README is used to introduce the module and provide instructions on
-how to install the module, any machine dependencies it may have (for
-example C compilers and installed libraries) and any other information
-that should be provided before the module is installed.
+Perl bindings for Megaplan.ru API
 
-A README file is required for CPAN modules since CPAN extracts the README
-file from a module distribution so that people browsing the archive
-can use it to get an idea of the module's uses. It is usually a good idea
-to provide version information here so that people can decide whether
-fixes for the module are worth downloading.
+http://wiki.megaplan.ru/API
+
+
+    use WebService::Megaplan;
+
+    my $api = WebService::Megaplan->new(
+                    login    => 'robot_user',
+                    password => 'xxxxxx',
+                    hostname => 'mycompany.megaplan.ru',
+                    use_ssl  => 1,
+                );
+    $api->authorize();
+
+    # get list of tasks
+    my $data = $api->get_data('/BumsTaskApiV01/Task/list.api', { OnlyActual => 'true' });
+    my $task_list = $data->{data}->{tasks};
 
 
 INSTALLATION

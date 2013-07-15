@@ -19,6 +19,13 @@ my $builder = Module::Build->new(
     requires => {
         #'ABC'              => 1.6,
         #'Foo::Bar::Module' => 5.0401,
+        'Digest::MD5' => 0,
+        'Digest::HMAC_SHA1' => 0,
+        'JSON' => 0,
+        'HTTP::Tiny' => 0,
+        'MIME::Base64' => 0,
+        'Class::Accessor' => 0,
+        'POSIX' => 0,
     },
     add_to_cleanup     => [ 'WebService-Megaplan-*' ],
     create_makefile_pl => 'traditional',

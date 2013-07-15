@@ -1,5 +1,5 @@
 ---
-abstract: 'The great new WebService::Megaplan!'
+abstract: 'The API for Megaplan.ru service (Web-based business automatization service)'
 author:
   - 'Sergey Leschenko <sergle.ua@gmail.com>'
 build_requires:
@@ -17,6 +17,14 @@ provides:
   WebService::Megaplan:
     file: lib/WebService/Megaplan.pm
     version: 0.01
+requires:
+  Class::Accessor: 0
+  Digest::HMAC_SHA1: 0
+  Digest::MD5: 0
+  HTTP::Tiny: 0
+  JSON: 0
+  MIME::Base64: 0
+  POSIX: 0
 resources:
   license: http://opensource.org/licenses/artistic-license-2.0.php
 version: 0.01

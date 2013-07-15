@@ -4,9 +4,23 @@ use 5.006;
 use strict;
 use warnings FATAL => 'all';
 
+use base qw(Class::Accessor);
+__PACKAGE__->mk_accessors(qw(login password hostname port use_ssl secret_key access_id http));
+
+use Digest::MD5 qw(md5_hex);
+use Digest::HMAC_SHA1 qw(hmac_sha1_hex);
+use JSON qw(from_json);
+use HTTP::Tiny ();
+use MIME::Base64 qw(encode_base64);
+use POSIX ();
+
+use constant {
+        AUTHORIZE_URL => '/BumsCommonApiV01/User/authorize.api',
+    };
+
 =head1 NAME
 
-WebService::Megaplan - The great new WebService::Megaplan!
+WebService::Megaplan - The API for Megaplan.ru service (Web-based business automatization service)
 
 =head1 VERSION
 
@@ -19,35 +33,212 @@ our $VERSION = '0.01';
 
 =head1 SYNOPSIS
 
-Quick summary of what the module does.
+Module allows to call Megaplan API using Perl
 
-Perhaps a little code snippet.
+See API details on http://wiki.megaplan.ru/API (Russian only)
+
+Currently implemented only low-level API where you have to provide URI of API calls.
 
     use WebService::Megaplan;
 
-    my $foo = WebService::Megaplan->new();
-    ...
+    my $api = WebService::Megaplan->new(
+                    login    => 'robot_user',
+                    password => 'xxxxxx',
+                    hostname => 'mycompany.megaplan.ru',
+                    use_ssl  => 1,
+                );
+    $api->authorize();
+    
+    # get list of tasks
+    my $data = $api->get_data('/BumsTaskApiV01/Task/list.api', { OnlyActual => 'true' });
+    my $task_list = $data->{data}->{tasks};
 
-=head1 EXPORT
+=head1 METHODS
 
-A list of functions that can be exported.  You can delete this section
-if you don't export anything, such as for a purely object-oriented module.
+=head2 new(%opt)
+    
+Create new API object, providing a hash of options:
 
-=head1 SUBROUTINES/METHODS
+=over 2
 
-=head2 function1
+=item login    -- login
+
+=item password -- password
+
+=item hostname -- hostname of installed Megaplan, usually something like 'somename.megaplan.ru' 
+
+=item port     -- port to use to connect Megaplan, not required if default (80 http, 443 https)
+
+=item use_ssl  -- 0 or 1, using SSL is recommended
+
+=back
 
 =cut
 
-sub function1 {
+sub new {
+    my($class, %opts) = @_;
+
+    die "No login specified"    if(! $opts{login});
+    die "No password specified" if(! $opts{password});
+    die "No hostname specified" if(! $opts{hostname});
+
+    $opts{use_ssl} ||= 0;
+
+    my $http = HTTP::Tiny->new();
+    $opts{http} = $http;
+
+    return bless \%opts, $class;
 }
 
-=head2 function2
+=head2 authorize
+
+Authenticate itself on Megaplan server and obtain AccessId and SecretKey values.
+
+Returns true value on success. This method have to be called before any other API calls.
 
 =cut
 
-sub function2 {
+sub authorize {
+    my $self = shift;
+
+    my $params = $self->http->www_form_urlencode({
+                                Login    => $self->login,
+                                Password => md5_hex($self->password),
+                            });
+    my $url = ($self->use_ssl ? 'https' : 'http') 
+                    . '://' 
+                    . $self->hostname 
+                    . ($self->port ? ':' . $self->port : '') 
+                    . AUTHORIZE_URL
+                    . '?' 
+                    . $params;
+    #printf STDERR "GET %s\n", $url;
+
+    my $response = $self->http->get($url);
+    die 'No response from server' if(! $response);
+    if(! $response->{success}) {
+        die sprintf('Login failed: %03d %s', $response->{status}, $response->{reason});
+    }
+
+    my $data = from_json($response->{content});
+
+    if($data->{status}->{code} ne 'ok') {
+        die sprintf('Login failed: %s', $data->{status}->{message});
+    }
+
+    my $secret = $data->{data}->{SecretKey};
+    my $access_id = $data->{data}->{AccessId};
+
+    $self->secret_key($secret);
+    $self->access_id($access_id);
+
+    return 1;
 }
+
+=head2 get_data(uri_path, [ $params ])
+
+Low-level method to perform GET query to corresponding API method
+
+=over 2
+
+=item uri_path -- URI, for example '/BumsTaskApiV01/Task/list.api'
+
+=item params   -- hash-reference of API call arguments
+
+=back
+
+=cut
+
+sub get_data {
+    my ($self, $uri_path, $params) = @_;
+
+    $params ||= {};
+
+    $self->authorize() if(! $self->secret_key);
+    die "No secret key, failed login?" if(! $self->secret_key);
+    
+    my ($signature, $date) = $self->_make_signature(
+                                    method => 'GET',
+                                    content => '',
+                                    uri_path => $uri_path,
+                                    query_params => $params,
+                                );
+
+    my $query_string = $self->http->www_form_urlencode($params);
+    my $url = ($self->use_ssl ? 'https' : 'http') 
+                    . '://' 
+                    . $self->hostname 
+                    . ($self->port ? ':' . $self->port : '') 
+                    . $uri_path;
+    if($query_string) {
+        $url .= '?' . $query_string;
+    }
+                    
+    #printf STDERR "GET %s\n", $url;
+
+    my $response = $self->http->get($url, {
+                            headers => {
+                                Date              => $date,
+                                'X-Sdf-Date'      => $date,
+                                Accept            => 'application/json',
+                                'X-Authorization' => join(':', $self->access_id, $signature),
+                            },
+                        });
+
+    die 'No response from server' if(! $response);
+    if(! $response->{success}) {
+        die sprintf('GET failed: %03d %s', $response->{status}, $response->{reason});
+    }
+
+    my $data = from_json($response->{content});
+
+    if($data->{status}->{code} ne 'ok') {
+        die sprintf('GET failed: %s', $data->{status}->{message});
+    }
+
+    return $data;
+}
+
+=head2 post_data
+
+TODO -- perform POST request to modify the data and create new objects
+
+=cut
+
+sub post_data {
+}
+
+#-------------- private
+sub _make_signature {
+    my ($self, %opts) = @_;
+    
+    # method, content_md5, content_type, date, url
+    my @fields = ($opts{method});
+    if($opts{content}) {
+        # TODO 
+    }
+    else {
+        push @fields, '', '';
+    }
+
+    my $old_locale = POSIX::setlocale(&POSIX::LC_TIME, 'C');
+    my $date = POSIX::strftime('%a, %d %b %Y %H:%M:%S %z', localtime);
+    push @fields, $date;
+    POSIX::setlocale(&POSIX::LC_TIME, $old_locale);
+    
+    # I think that port should not be included here, but never tested
+    my $url = $self->hostname . $opts{uri_path};
+    if( ($opts{method} eq 'GET') && $opts{query_params} && scalar(keys $opts{query_params}) > 0) {
+        my $query_string = $self->http->www_form_urlencode($opts{query_params});
+        $url .= '?' . $query_string;
+    }
+    push @fields, $url;
+
+    my $signature = encode_base64( hmac_sha1_hex(join("\n", @fields), $self->secret_key), '');
+
+    return ($signature, $date);
+}
+
 
 =head1 AUTHOR
 
@@ -72,6 +263,10 @@ You can find documentation for this module with the perldoc command.
 You can also look for information at:
 
 =over 4
+
+=item * Megaplan API (Russian only)
+
+L<http://wiki.megaplan.ru/API>
 
 =item * RT: CPAN's request tracker (report bugs here)
 

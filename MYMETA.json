@@ -1,5 +1,5 @@
 {
-   "abstract" : "The great new WebService::Megaplan!",
+   "abstract" : "The API for Megaplan.ru service (Web-based business automatization service)",
    "author" : [
       "Sergey Leschenko <sergle.ua@gmail.com>"
    ],
@@ -22,6 +22,17 @@
       "configure" : {
          "requires" : {
             "Module::Build" : 0
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Class::Accessor" : 0,
+            "Digest::HMAC_SHA1" : 0,
+            "Digest::MD5" : 0,
+            "HTTP::Tiny" : 0,
+            "JSON" : 0,
+            "MIME::Base64" : 0,
+            "POSIX" : 0
          }
       }
    },
