@@ -1,5 +1,8 @@
 Revision history for WebService-Megaplan
 
+0.03    2013-07-19
+        Fixing failing test: Type of arg 1 to keys must be hash or array (not hash element)
+
 0.02    2013-07-16
         Added support for write queries
 

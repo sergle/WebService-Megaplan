@@ -24,11 +24,11 @@ WebService::Megaplan - The API for Megaplan.ru service (Web-based business autom
 
 =head1 VERSION
 
-Version 0.02
+Version 0.03
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 
 =head1 SYNOPSIS
@@ -48,7 +48,7 @@ Currently implemented only low-level API where you have to provide URI of API ca
                     use_ssl  => 1,
                 );
     my $employee_id = $api->authorize();
-    
+
     # get list of tasks
     my $data = $api->get_data('/BumsTaskApiV01/Task/list.api', { OnlyActual => 'true' });
     my $task_list = $data->{data}->{tasks};
@@ -65,7 +65,7 @@ Currently implemented only low-level API where you have to provide URI of API ca
 =head1 METHODS
 
 =head2 new(%opt)
-    
+
 Create new API object, providing a hash of options:
 
 =over 2
@@ -74,7 +74,7 @@ Create new API object, providing a hash of options:
 
 =item password -- password
 
-=item hostname -- hostname of installed Megaplan, usually something like 'somename.megaplan.ru' 
+=item hostname -- hostname of installed Megaplan, usually something like 'somename.megaplan.ru'
 
 =item port     -- port to use to connect Megaplan, not required if default (80 http, 443 https)
 
@@ -114,12 +114,12 @@ sub authorize {
                                 Login    => $self->login,
                                 Password => md5_hex($self->password),
                             });
-    my $url = ($self->use_ssl ? 'https' : 'http') 
-                    . '://' 
-                    . $self->hostname 
-                    . ($self->port ? ':' . $self->port : '') 
+    my $url = ($self->use_ssl ? 'https' : 'http')
+                    . '://'
+                    . $self->hostname
+                    . ($self->port ? ':' . $self->port : '')
                     . AUTHORIZE_URL
-                    . '?' 
+                    . '?'
                     . $params;
     #printf STDERR "GET %s\n", $url;
 
@@ -140,7 +140,7 @@ sub authorize {
 
     $self->secret_key($secret);
     $self->access_id($access_id);
-    
+
     # also there are 'UserId' value
     return $data->{data}->{EmployeeId};
 }
@@ -168,7 +168,7 @@ sub get_data {
 
     $self->authorize() if(! $self->secret_key);
     die "No secret key, failed login?" if(! $self->secret_key);
-    
+
     my ($signature, $date) = $self->_make_signature(
                                     method => 'GET',
                                     content => '',
@@ -177,15 +177,15 @@ sub get_data {
                                 );
 
     my $query_string = $self->http->www_form_urlencode($params);
-    my $url = ($self->use_ssl ? 'https' : 'http') 
-                    . '://' 
-                    . $self->hostname 
-                    . ($self->port ? ':' . $self->port : '') 
+    my $url = ($self->use_ssl ? 'https' : 'http')
+                    . '://'
+                    . $self->hostname
+                    . ($self->port ? ':' . $self->port : '')
                     . $uri_path;
     if($query_string) {
         $url .= '?' . $query_string;
     }
-                    
+
     #printf STDERR "GET %s\n", $url;
 
     my $response = $self->http->get($url, {
@@ -242,10 +242,10 @@ sub post_data {
                                     content      => $content,
                                     uri_path     => $uri_path
                                 );
-    my $url = ($self->use_ssl ? 'https' : 'http') 
-                    . '://' 
-                    . $self->hostname 
-                    . ($self->port ? ':' . $self->port : '') 
+    my $url = ($self->use_ssl ? 'https' : 'http')
+                    . '://'
+                    . $self->hostname
+                    . ($self->port ? ':' . $self->port : '')
                     . $uri_path;
 
     my $response = $self->http->post_form($url, $params, {
@@ -275,7 +275,7 @@ sub post_data {
 #-------------- private
 sub _make_signature {
     my ($self, %opts) = @_;
-    
+
     # method, content_md5, content_type, date, url
     my @fields = ($opts{method});
     if($opts{content}) {
@@ -291,10 +291,10 @@ sub _make_signature {
     my $date = POSIX::strftime('%a, %d %b %Y %H:%M:%S %z', localtime);
     push @fields, $date;
     POSIX::setlocale(&POSIX::LC_TIME, $old_locale);
-    
+
     # I think that port should not be included here, but never tested
     my $url = $self->hostname . $opts{uri_path};
-    if( ($opts{method} eq 'GET') && $opts{query_params} && scalar(keys $opts{query_params}) > 0) {
+    if( ($opts{method} eq 'GET') && $opts{query_params} && scalar(keys %{ $opts{query_params} }) > 0) {
         my $query_string = $self->http->www_form_urlencode($opts{query_params});
         $url .= '?' . $query_string;
     }
